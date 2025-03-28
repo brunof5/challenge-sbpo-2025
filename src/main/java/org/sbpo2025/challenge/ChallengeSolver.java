@@ -2,7 +2,14 @@ package org.sbpo2025.challenge;
 
 import org.apache.commons.lang3.time.StopWatch;
 
+import ilog.concert.IloException;
+import ilog.concert.IloLinearNumExpr;
+import ilog.concert.IloNumVar;
+
+import ilog.cplex.IloCplex;
+
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,7 +34,92 @@ public class ChallengeSolver {
     }
 
     public ChallengeSolution solve(StopWatch stopWatch) {
-        // Implement your solution here
+        try {
+            IloCplex cplex = new IloCplex();
+            cplex.setParam(IloCplex.Param.TimeLimit, getRemainingTime(stopWatch));
+    
+            int nOrders = orders.size();
+            int nAisles = aisles.size();
+            double epsilon = 1e-6;
+    
+            // Variáveis de decisão
+            IloNumVar[] x = cplex.boolVarArray(nAisles);
+            IloNumVar[] y = cplex.boolVarArray(nOrders);
+            IloNumVar t = cplex.numVar(0, Double.MAX_VALUE, "t");
+            IloNumVar[] z = new IloNumVar[nOrders];
+            IloNumVar[] w = new IloNumVar[nAisles];
+
+            // Restrições
+            for (int o = 0; o < nOrders; o++) {
+                z[o] = cplex.numVar(0, Double.MAX_VALUE, "z[" + o + "]");
+                cplex.addLe(z[o], t);
+                cplex.addLe(z[o], y[o]);
+                cplex.addGe(z[o], cplex.sum(t, cplex.prod(-1, cplex.diff(1, y[o]))));
+            }
+
+            for (int a = 0; a < nAisles; a++) {
+                w[a] = cplex.numVar(0, Double.MAX_VALUE, "w[" + a + "]");
+                cplex.addLe(w[a], t);
+                cplex.addLe(w[a], x[a]);
+                cplex.addGe(w[a], cplex.sum(t, cplex.prod(-1, cplex.diff(1, x[a]))));
+            }
+
+            IloLinearNumExpr totalUnits = cplex.linearNumExpr();
+            for (int o = 0; o < nOrders; o++) {
+                for (int i : orders.get(o).keySet()) {
+                    totalUnits.addTerm(orders.get(o).get(i), z[o]);
+                }
+            }
+            cplex.addGe(totalUnits, cplex.prod(waveSizeLB, t));
+            cplex.addLe(totalUnits, cplex.prod(waveSizeUB, t));
+
+            for (int i = 0; i < nItems; i++) {
+                IloLinearNumExpr pickedUnits = cplex.linearNumExpr();
+                IloLinearNumExpr availableUnits = cplex.linearNumExpr();
+
+                for (int o = 0; o < nOrders; o++) {
+                    if (orders.get(o).containsKey(i)) {
+                        pickedUnits.addTerm(orders.get(o).get(i), z[o]);
+                    }
+                }
+                for (int a = 0; a < nAisles; a++) {
+                    if (aisles.get(a).containsKey(i)) {
+                        availableUnits.addTerm(aisles.get(a).get(i), w[a]);
+                    }
+                }
+                cplex.addLe(pickedUnits, availableUnits);
+            }
+
+            IloLinearNumExpr sumWa = cplex.linearNumExpr();
+            for (int a = 0; a < nAisles; a++) {
+                sumWa.addTerm(1.0, w[a]);
+            }
+            cplex.addGe(sumWa, 1 - epsilon, "sum_w_minus");
+            cplex.addLe(sumWa, 1 + epsilon, "sum_w_plus");
+
+            // Função objetivo
+            cplex.addMaximize(totalUnits);
+
+            // Resolvendo
+            Set<Integer> selectedOrders = new HashSet<>();
+            Set<Integer> selectedAisles = new HashSet<>();
+            if (cplex.solve()) {
+                for (int o = 0; o < nOrders; o++) {
+                    if (cplex.getValue(y[o]) > 0.5) selectedOrders.add(o);
+                }
+                for (int a = 0; a < nAisles; a++) {
+                    if (cplex.getValue(x[a]) > 0.5) selectedAisles.add(a);
+                }
+
+                //System.out.println("Pedidos selecionados:" + selectedOrders);
+                //System.out.println("Corredores selecionados:" + selectedAisles);
+            }
+            cplex.end();
+            return new ChallengeSolution(selectedOrders, selectedAisles);
+
+        } catch (IloException e) {
+            e.printStackTrace();
+        }
         return null;
     }
 
