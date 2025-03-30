@@ -8,6 +8,7 @@ import ilog.concert.IloNumVar;
 
 import ilog.cplex.IloCplex;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -23,6 +24,8 @@ public class ChallengeSolver {
     protected int nItems;
     protected int waveSizeLB;
     protected int waveSizeUB;
+    
+    private final GreedyAlgorithm greedyAlgorithm;
 
     public ChallengeSolver(
             List<Map<Integer, Integer>> orders, List<Map<Integer, Integer>> aisles, int nItems, int waveSizeLB, int waveSizeUB) {
@@ -31,6 +34,8 @@ public class ChallengeSolver {
         this.nItems = nItems;
         this.waveSizeLB = waveSizeLB;
         this.waveSizeUB = waveSizeUB;
+
+        greedyAlgorithm = new GreedyAlgorithm(orders, aisles, nItems, waveSizeLB, waveSizeUB);
     }
 
     public ChallengeSolution solve(StopWatch stopWatch) {
@@ -46,24 +51,22 @@ public class ChallengeSolver {
             IloNumVar[] x = cplex.boolVarArray(nAisles);
             IloNumVar[] y = cplex.boolVarArray(nOrders);
             IloNumVar t = cplex.numVar(0, Double.MAX_VALUE, "t");
-            IloNumVar[] z = new IloNumVar[nOrders];
-            IloNumVar[] w = new IloNumVar[nAisles];
-
+            IloNumVar[] z = cplex.numVarArray(nOrders, 0, Double.MAX_VALUE);
+            IloNumVar[] w = cplex.numVarArray(nAisles, 0, Double.MAX_VALUE);
+            
             // Restrições
             for (int o = 0; o < nOrders; o++) {
-                z[o] = cplex.numVar(0, Double.MAX_VALUE, "z[" + o + "]");
                 cplex.addLe(z[o], t);
                 cplex.addLe(z[o], y[o]);
                 cplex.addGe(z[o], cplex.sum(t, cplex.prod(-1, cplex.diff(1, y[o]))));
             }
 
             for (int a = 0; a < nAisles; a++) {
-                w[a] = cplex.numVar(0, Double.MAX_VALUE, "w[" + a + "]");
                 cplex.addLe(w[a], t);
                 cplex.addLe(w[a], x[a]);
                 cplex.addGe(w[a], cplex.sum(t, cplex.prod(-1, cplex.diff(1, x[a]))));
             }
-
+            
             IloLinearNumExpr totalUnits = cplex.linearNumExpr();
             for (int o = 0; o < nOrders; o++) {
                 for (int i : orders.get(o).keySet()) {
@@ -72,11 +75,11 @@ public class ChallengeSolver {
             }
             cplex.addGe(totalUnits, cplex.prod(waveSizeLB, t));
             cplex.addLe(totalUnits, cplex.prod(waveSizeUB, t));
-
+            
             for (int i = 0; i < nItems; i++) {
                 IloLinearNumExpr pickedUnits = cplex.linearNumExpr();
                 IloLinearNumExpr availableUnits = cplex.linearNumExpr();
-
+                
                 for (int o = 0; o < nOrders; o++) {
                     if (orders.get(o).containsKey(i)) {
                         pickedUnits.addTerm(orders.get(o).get(i), z[o]);
@@ -89,17 +92,53 @@ public class ChallengeSolver {
                 }
                 cplex.addLe(pickedUnits, availableUnits);
             }
-
+            
             IloLinearNumExpr sumWa = cplex.linearNumExpr();
             for (int a = 0; a < nAisles; a++) {
                 sumWa.addTerm(1.0, w[a]);
             }
             cplex.addGe(sumWa, 1 - epsilon, "sum_w_minus");
             cplex.addLe(sumWa, 1 + epsilon, "sum_w_plus");
-
+            
             // Função objetivo
             cplex.addMaximize(totalUnits);
 
+            // Solução inicial (gulosa)
+            ChallengeSolution initialSolution = greedyAlgorithm.solve();
+            if (initialSolution != null && isSolutionFeasible(initialSolution)) {
+                System.out.println("Solução inicial viável encontrada!");
+                List<IloNumVar> mipStartVars = new ArrayList<>();
+                List<Double> mipStartValues = new ArrayList<>();
+
+                // y e z
+                for (int o = 0; o < nOrders; o++) {
+                    mipStartVars.add(y[o]);
+                    mipStartValues.add(initialSolution.orders().contains(o) ? 1.0 : 0.0);
+
+                    mipStartVars.add(z[o]);
+                    mipStartValues.add(initialSolution.orders().contains(o) ? 1.0 / initialSolution.aisles().size() : 0.0);
+                }
+
+                // x e w
+                for (int a = 0; a < nAisles; a++) {
+                    mipStartVars.add(x[a]);
+                    mipStartValues.add(initialSolution.aisles().contains(a) ? 1.0 : 0.0);
+
+                    mipStartVars.add(w[a]);
+                    mipStartValues.add(initialSolution.aisles().contains(a) ? 1.0 / initialSolution.aisles().size() : 0.0);
+                }
+
+                // t
+                mipStartVars.add(t);
+                mipStartValues.add(1.0 / initialSolution.aisles().size());
+
+                // Adicionando ao CPLEX
+                cplex.addMIPStart(
+                    mipStartVars.toArray(new IloNumVar[0]),
+                    mipStartValues.stream().mapToDouble(Double::doubleValue).toArray()
+                );
+            }
+            
             // Resolvendo
             Set<Integer> selectedOrders = new HashSet<>();
             Set<Integer> selectedAisles = new HashSet<>();
