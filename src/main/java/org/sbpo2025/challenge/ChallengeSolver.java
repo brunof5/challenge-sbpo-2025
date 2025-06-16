@@ -1,8 +1,6 @@
 package org.sbpo2025.challenge;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -11,10 +9,6 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.time.StopWatch;
 
 import ilog.concert.IloException;
-import ilog.concert.IloLinearNumExpr;
-import ilog.concert.IloNumVar;
-
-import ilog.cplex.IloCplex;
 
 public class ChallengeSolver {
     private final long MAX_RUNTIME = 600000; // milliseconds; 10 minutes
@@ -39,177 +33,77 @@ public class ChallengeSolver {
     }
 
     public ChallengeSolution solve(StopWatch stopWatch) {
-        int nOrders = orders.size();
-        int nAisles = aisles.size();
         int iteration = 0, maxIterations = 15;
-        double bestQ = 0.0, lastQ, q = 0.0, epsilon = 1e-4;
+        double bestQ = 0.0, q = 0.0, epsilon = 1e-4;
 
-        Set<Integer> selectedOrdersGlobal = new HashSet<>();
-        Set<Integer> selectedAislesGlobal = new HashSet<>();
+        // Solução inicial
+        ChallengeSolution currentSolution = greedyAlgorithm.solve();
 
-        // Solução inicial (gulosa)
-        ChallengeSolution initialSolution = greedyAlgorithm.solve();
+        //System.out.println("\nTempo decorrido: " + getElapsedTime(stopWatch) + " seg.");
+        //System.out.println();
 
-        List<Double> mipStartValues = new ArrayList<>();
-        if (initialSolution != null && isSolutionFeasible(initialSolution)) {
-            // y
-            for (int o = 0; o < nOrders; o++) {
-                mipStartValues.add(initialSolution.orders().contains(o) ? 1.0 : 0.0);
-            }
+        ParametricSolver paramSolver = new ParametricSolver(orders, aisles, nItems, waveSizeLB, waveSizeUB);
 
-            // x
-            for (int a = 0; a < nAisles; a++) {
-                mipStartValues.add(initialSolution.aisles().contains(a) ? 1.0 : 0.0);
-            }
-        }
-
-        do {
-            lastQ = q;
-            try {
-                IloCplex cplex = new IloCplex();
-                cplex.setParam(IloCplex.Param.MIP.Tolerances.MIPGap, 1);
-                //cplex.setOut(null);
-                //double remainingTime = getRemainingTime(stopWatch);
-                //double maxAllowedTime = remainingTime / Math.max(1, maxIterations - iteration);
-                //double iterationLimit = Math.min(remainingTime, maxAllowedTime);
-        
-                // Variáveis de decisão
-                IloNumVar[] x = new IloNumVar[nAisles];
-                for (int a = 0; a < nAisles; a++) {
-                    x[a] = cplex.boolVar("x" + a);
-                }
-                IloNumVar[] y = new IloNumVar[nOrders];
-                for (int o = 0; o < nOrders; o++) {
-                    y[o] = cplex.boolVar("y" + o);
-                }
-
-                // Função objetivo
-                IloLinearNumExpr obj = cplex.linearNumExpr();
-                for (int o = 0; o < nOrders; o++) {
-                    for (int i : orders.get(o).keySet()) {
-                        obj.addTerm(orders.get(o).get(i), y[o]);
-                    }
-                }
-                for (int a = 0; a < nAisles; a++) {
-                    obj.addTerm(-q, x[a]);
-                }
-                cplex.addMaximize(obj);
-
-                // Restrições
-                IloLinearNumExpr totalUnits = cplex.linearNumExpr();
-                for (int o = 0; o < nOrders; o++) {
-                    for (int i : orders.get(o).keySet()) {
-                        totalUnits.addTerm(orders.get(o).get(i), y[o]);
-                    }
-                }
-                cplex.addGe(totalUnits, waveSizeLB);
-                cplex.addLe(totalUnits, waveSizeUB);
-
-                for (int i = 0; i < nItems; i++) {
-                    IloLinearNumExpr pickedUnits = cplex.linearNumExpr();
-                    IloLinearNumExpr availableUnits = cplex.linearNumExpr();
-                    
-                    for (int o = 0; o < nOrders; o++) {
-                        if (orders.get(o).containsKey(i)) {
-                            pickedUnits.addTerm(orders.get(o).get(i), y[o]);
-                        }
-                    }
-                    for (int a = 0; a < nAisles; a++) {
-                        if (aisles.get(a).containsKey(i)) {
-                            availableUnits.addTerm(aisles.get(a).get(i), x[a]);
-                        }
-                    }
-                    cplex.addLe(pickedUnits, availableUnits);
-                }
+        try {
+            do {
+                paramSolver.updateObjectiveFunction(orders, aisles, q);
                 
-                IloLinearNumExpr sumXa = cplex.linearNumExpr();
-                for (int a = 0; a < nAisles; a++) {
-                    sumXa.addTerm(1.0, x[a]);
-                }
-                cplex.addGe(sumXa, 1);
-
-                if (initialSolution != null && isSolutionFeasible(initialSolution)) {
-                    List<IloNumVar> mipStartVars = new ArrayList<>();
-                    // y
-                    for (int o = 0; o < nOrders; o++) {
-                        mipStartVars.add(y[o]);
-                    }
-        
-                    // x
-                    for (int a = 0; a < nAisles; a++) {
-                        mipStartVars.add(x[a]);
-                    }
-        
-                    // Adicionando ao CPLEX
-                    cplex.addMIPStart(
-                        mipStartVars.toArray(new IloNumVar[0]),
-                        mipStartValues.stream().mapToDouble(Double::doubleValue).toArray()
-                    );
+                if (currentSolution != null && isSolutionFeasible(currentSolution)) {
+                    paramSolver.setInitialSolution(currentSolution);
                 }
 
-                cplex.setParam(IloCplex.Param.TimeLimit, getRemainingTime(stopWatch));
+                paramSolver.setTimeLimit(getRemainingTime(stopWatch));
 
-                // Resolvendo
-                if (cplex.solve()) {
-                    Set<Integer> selectedOrders = new HashSet<>();
-                    Set<Integer> selectedAisles = new HashSet<>();
-                    double totalPicked = 0;
-                    double totalAisles = 0;
+                ChallengeSolution newSolution = paramSolver.solveModel();
 
-                    for (int o = 0; o < nOrders; o++) {
-                        if (cplex.getValue(y[o]) > 0.5) {
-                            selectedOrders.add(o);
-                            for (int i : orders.get(o).keySet()) {
-                                totalPicked += orders.get(o).get(i);
-                            }
-                        }
-                    }
-                    for (int a = 0; a < nAisles; a++) {
-                        if (cplex.getValue(x[a]) > 0.5) {
-                            selectedAisles.add(a);
-                            totalAisles += 1;
-                        }
+                System.out.println();
+                System.out.print("it: " + iteration + ", ");
+
+                if (newSolution != null && isSolutionFeasible(newSolution)) {
+                    double newQ = computeObjectiveFunction(newSolution);
+
+                    System.out.println("q: " + newQ);
+
+                    if (newQ > bestQ) {
+                        bestQ = newQ;
+                        currentSolution = newSolution;
                     }
 
-                    if (totalAisles > 0) {
-                        System.out.println();
-                        System.out.println("Total unidades: " + totalPicked);
-                        System.out.println("Total corredores: " + totalAisles);
-                        q = totalPicked / totalAisles;
+                    int totalUnitsPicked = 0;
+                    for (int order : newSolution.orders()) {
+                        totalUnitsPicked += orders.get(order).values().stream()
+                                .mapToInt(Integer::intValue)
+                                .sum();
                     }
-                    
-                    System.out.println();
-                    System.out.println("q: " + q);
-                    System.out.println("it: " + iteration);
+                    int numVisitedAisles = newSolution.aisles().size();
 
-                    if (q > bestQ) {
-                        bestQ = q;
-                        selectedAislesGlobal = selectedAisles;
-                        selectedOrdersGlobal = selectedOrders;
-                    }
+                    System.out.println("Total units: " + totalUnitsPicked);
+                    System.out.println("Visited aisles: " + numVisitedAisles);
 
-                    if (Math.abs(q - lastQ) < epsilon) {
-                        break;
-                    }
+                    double Fq = totalUnitsPicked - q * numVisitedAisles;
+
+                    if (Math.abs(Fq) < epsilon) break;
+
+                    q = newQ;
+                } else {
+                    System.out.println("Solução não encontrada ou infactível");
                 }
-                cplex.end();
 
-            } catch (IloException e) {
-                e.printStackTrace();
-                return null;
-            }
-            iteration++;
+                System.out.println("Tempo decorrido: " + getElapsedTime(stopWatch) + " seg.");
 
-            // Verificando se o tempo limite foi atingido
-            if (getRemainingTime(stopWatch) <= 1) {
-                break;
-            }
+                iteration++;
+            } while (iteration < maxIterations && getRemainingTime(stopWatch) > 1);
 
-        } while (iteration < maxIterations);
+        } catch (IloException e) {
+            e.printStackTrace();
+            return null;
+        } finally {
+            paramSolver.endModel();
+        }
 
         System.out.println("\nTempo decorrido: " + getElapsedTime(stopWatch) + " seg.");
 
-        return new ChallengeSolution(selectedOrdersGlobal, selectedAislesGlobal);
+        return currentSolution;
     }
 
     /*

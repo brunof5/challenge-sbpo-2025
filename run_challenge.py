@@ -4,8 +4,7 @@ import sys
 import platform
 
 # Paths to the libraries (may be differ)
-# default installation path for Linux: /opt/ibm/ILOG/CPLEX_Studio2211/opl/bin/x86-64_linux
-CPLEX_PATH = "$HOME/CPLEX_Studio2211/opl/bin/arm64_osx/"
+CPLEX_PATH = "/opt/ibm/ILOG/CPLEX_Studio2211/opl/bin/x86-64_linux"
 OR_TOOLS_PATH = "$HOME/Documents/or-tools/build/lib/"
 
 USE_CPLEX = True

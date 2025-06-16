@@ -3,7 +3,7 @@
 # Caminho para os diretórios (mude conforme necessidade)
 # Observação: O nome das instâncias de entrada/saída devem ser os mesmos
 input_directory="./datasets/a"
-output_directory="./output_greedy"
+output_directory="./output/a"
 
 # Verifica se os diretórios de entrada e saída existem
 if [ ! -d "$input_directory" ]; then
