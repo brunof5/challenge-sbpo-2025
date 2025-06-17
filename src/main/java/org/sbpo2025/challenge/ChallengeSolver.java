@@ -20,6 +20,7 @@ public class ChallengeSolver {
     protected int waveSizeUB;
 
     private final GreedyAlgorithm greedyAlgorithm;
+    private final ImprovedGreedyAlgorithm improvedGreedyAlgorithm;
 
     public ChallengeSolver(
             List<Map<Integer, Integer>> orders, List<Map<Integer, Integer>> aisles, int nItems, int waveSizeLB, int waveSizeUB) {
@@ -30,24 +31,28 @@ public class ChallengeSolver {
         this.waveSizeUB = waveSizeUB;
 
         greedyAlgorithm = new GreedyAlgorithm(orders, aisles, nItems, waveSizeLB, waveSizeUB);
+        improvedGreedyAlgorithm = new ImprovedGreedyAlgorithm(orders, aisles, nItems, waveSizeLB, waveSizeUB);
     }
 
     public ChallengeSolution solve(StopWatch stopWatch) {
         int iteration = 0, maxIterations = 15;
         double bestQ = 0.0, q = 0.0, epsilon = 1e-4;
 
-        // Solução inicial
-        ChallengeSolution currentSolution = greedyAlgorithm.solve();
+        ChallengeSolution currentSolution = improvedGreedyAlgorithm.solve();
 
-        //System.out.println("\nTempo decorrido: " + getElapsedTime(stopWatch) + " seg.");
-        //System.out.println();
+        q = printGreedy(currentSolution);        
+
+        System.out.println("\nTempo decorrido: " + getElapsedTime(stopWatch) + " seg.");
+        System.out.println();
+
+        System.out.println("### Parametric solver ###");
 
         ParametricSolver paramSolver = new ParametricSolver(orders, aisles, nItems, waveSizeLB, waveSizeUB);
 
         try {
             do {
                 paramSolver.updateObjectiveFunction(orders, aisles, q);
-                
+
                 if (currentSolution != null && isSolutionFeasible(currentSolution)) {
                     paramSolver.setInitialSolution(currentSolution);
                 }
@@ -106,6 +111,31 @@ public class ChallengeSolver {
         return currentSolution;
     }
 
+    private double printGreedy(ChallengeSolution currentSolution) {
+        int totalUnitsPicked = 0;
+        for (int order : currentSolution.orders()) {
+            totalUnitsPicked += orders.get(order).values().stream()
+                    .mapToInt(Integer::intValue)
+                    .sum();
+        }
+        int numVisitedAisles = currentSolution.aisles().size();
+
+        double q = 0.0;
+
+        System.out.println("### Greedy ###");
+        //System.out.println(currentSolution.orders());
+        //System.out.println(currentSolution.aisles());
+        System.out.println("\nTotal units: " + totalUnitsPicked);
+        System.out.println("Visited aisles: " + numVisitedAisles);
+        System.out.println("Feasible: " + isSolutionFeasible(currentSolution));
+        if (numVisitedAisles > 0) {
+            q = (double) totalUnitsPicked / numVisitedAisles;
+            System.out.println("q = " + q);
+        }
+
+        return q;
+    }
+
     /*
      * Get the remaining time in seconds
      */
@@ -115,7 +145,7 @@ public class ChallengeSolver {
                 0);
     }
 
-    public String getElapsedTime(StopWatch stopWatch) {
+    protected String getElapsedTime(StopWatch stopWatch) {
         long elapsedTimeInMillis = stopWatch.getTime(TimeUnit.MILLISECONDS);
         double elapsedTimeInSeconds = elapsedTimeInMillis / 1000.0;
         return String.format("%.2f", elapsedTimeInSeconds);
