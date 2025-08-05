@@ -21,6 +21,7 @@ public class ChallengeSolver {
 
     private final GreedyAlgorithm greedyAlgorithm;
     private final ImprovedGreedyAlgorithm improvedGreedyAlgorithm;
+    private final GeneticAlgorithm geneticAlgorithm;
 
     public ChallengeSolver(
             List<Map<Integer, Integer>> orders, List<Map<Integer, Integer>> aisles, int nItems, int waveSizeLB, int waveSizeUB) {
@@ -32,83 +33,12 @@ public class ChallengeSolver {
 
         greedyAlgorithm = new GreedyAlgorithm(orders, aisles, nItems, waveSizeLB, waveSizeUB);
         improvedGreedyAlgorithm = new ImprovedGreedyAlgorithm(orders, aisles, nItems, waveSizeLB, waveSizeUB);
+        geneticAlgorithm = new GeneticAlgorithm(orders, aisles, nItems, waveSizeLB, waveSizeUB);
     }
 
     public ChallengeSolution solve(StopWatch stopWatch) {
-        int iteration = 0, maxIterations = 15;
-        double bestQ = 0.0, q = 0.0, epsilon = 1e-4;
-
-        ChallengeSolution currentSolution = improvedGreedyAlgorithm.solve();
-
-        q = printGreedy(currentSolution);        
-
-        System.out.println("\nTempo decorrido: " + getElapsedTime(stopWatch) + " seg.");
-        System.out.println();
-
-        System.out.println("### Parametric solver ###");
-
-        ParametricSolver paramSolver = new ParametricSolver(orders, aisles, nItems, waveSizeLB, waveSizeUB);
-
-        try {
-            do {
-                paramSolver.updateObjectiveFunction(orders, aisles, q);
-
-                if (currentSolution != null && isSolutionFeasible(currentSolution)) {
-                    paramSolver.setInitialSolution(currentSolution);
-                }
-
-                paramSolver.setTimeLimit(getRemainingTime(stopWatch));
-
-                ChallengeSolution newSolution = paramSolver.solveModel();
-
-                System.out.println();
-                System.out.print("it: " + iteration + ", ");
-
-                if (newSolution != null && isSolutionFeasible(newSolution)) {
-                    double newQ = computeObjectiveFunction(newSolution);
-
-                    System.out.println("q: " + newQ);
-
-                    if (newQ > bestQ) {
-                        bestQ = newQ;
-                        currentSolution = newSolution;
-                    }
-
-                    int totalUnitsPicked = 0;
-                    for (int order : newSolution.orders()) {
-                        totalUnitsPicked += orders.get(order).values().stream()
-                                .mapToInt(Integer::intValue)
-                                .sum();
-                    }
-                    int numVisitedAisles = newSolution.aisles().size();
-
-                    System.out.println("Total units: " + totalUnitsPicked);
-                    System.out.println("Visited aisles: " + numVisitedAisles);
-
-                    double Fq = totalUnitsPicked - q * numVisitedAisles;
-
-                    if (Math.abs(Fq) < epsilon) break;
-
-                    q = newQ;
-                } else {
-                    System.out.println("Solução não encontrada ou infactível");
-                }
-
-                System.out.println("Tempo decorrido: " + getElapsedTime(stopWatch) + " seg.");
-
-                iteration++;
-            } while (iteration < maxIterations && getRemainingTime(stopWatch) > 1);
-
-        } catch (IloException e) {
-            e.printStackTrace();
-            return null;
-        } finally {
-            paramSolver.endModel();
-        }
-
-        System.out.println("\nTempo decorrido: " + getElapsedTime(stopWatch) + " seg.");
-
-        return currentSolution;
+        ChallengeSolution solution = geneticAlgorithm.solve();
+        return solution;
     }
 
     private double printGreedy(ChallengeSolution currentSolution) {
