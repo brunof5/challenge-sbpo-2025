@@ -1,8 +1,8 @@
 package org.sbpo2025.challenge;
 
+import org.apache.commons.lang3.tuple.Pair;
+
 import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 public class GeneticAlgorithm {
     private final List<Map<Integer, Integer>> orders;
@@ -21,56 +21,54 @@ public class GeneticAlgorithm {
 
     public ChallengeSolution solve() {
         Random random = new Random();
-        BitSet cadeiaOrders = new BitSet(orders.size());
-        BitSet cadeiaAisles = new BitSet(aisles.size());
         double resultado = 0, numGeracoes=5;
         double taxaMutacao = 0.2;
+        double taxaCruzamento = 0.7;
+        int nPopulacaoInicial = 3;
+        List<Individual> populacao = new ArrayList<>();
 
         // Inicializar população genética
-        int nOrders = random.nextInt(orders.size());
-        for (int i = 0; i<nOrders; i++){
-            int indice = random.nextInt(orders.size());
-            cadeiaOrders.set(indice);
-        }
-        int nAisles = random.nextInt(aisles.size());
-        for (int i=0; i<nAisles; i++){
-            int indice = random.nextInt(aisles.size());
-            cadeiaAisles.set(indice);
-        }
+        populacao = inicializarPopulacao(populacao, nPopulacaoInicial, random);
+
         // Repetir teste de aptidão e cruzamentos até critério de parada
         for (int i=0; i<numGeracoes; i++) {
 
             // Testar aptidão da população inicial
-            resultado = aptidao(cadeiaOrders, cadeiaAisles);
+            populacao.sort((ind1, ind2) -> Double.compare(aptidao(ind1), aptidao(ind2)));
+
+            // Seleciona 2 mais aptos
+            Individual ind1 = populacao.get(0);
+            Individual ind2 = populacao.get(1);
 
             // Fazer cruzamento
-            for (int j = 0; j < orders.size(); j++) {
-                if (random.nextDouble() < taxaMutacao) {
-                    cadeiaOrders.flip(j);
-                }
-            }
-            for (int j = 0; j < aisles.size(); j++) {
-                if (random.nextDouble() < taxaMutacao) {
-                    cadeiaAisles.flip(j);
-                }
-            }
+            List<Individual> filhos;
+            filhos = cruzamento(ind1, ind2, taxaCruzamento, random);
+            ind1 = mutacao(filhos.get(0), taxaMutacao);
+            ind2 = mutacao(filhos.get(1), taxaMutacao);
+
+            populacao = new ArrayList<>();
+            populacao.add(ind1);
+            populacao.add(ind2);
         }
 
         // Retornar melhor solução encontrada
+        Individual individuo = populacao.get(0);
         Set<Integer> pedidos = new HashSet<>();
         Set<Integer> corredores = new HashSet<>();
-        for (int i = cadeiaOrders.nextSetBit(0); i >= 0; i = cadeiaOrders.nextSetBit(i + 1)) {
+        for (int i = individuo.cadeiaOrders.nextSetBit(0); i >= 0; i = individuo.cadeiaOrders.nextSetBit(i + 1)) {
            pedidos.add(i);
         }
-        for (int i = cadeiaAisles.nextSetBit(0); i >= 0; i = cadeiaAisles.nextSetBit(i + 1)) {
+        for (int i = individuo.cadeiaAisles.nextSetBit(0); i >= 0; i = individuo.cadeiaAisles.nextSetBit(i + 1)) {
             corredores.add(i);
         }
         return new ChallengeSolution(pedidos, corredores);
     }
 
-    private Integer aptidao(BitSet p, BitSet c){
-        int numItens, numCorredores=0;
+    private Double aptidao(Individual individuo){
+        double numItens, numCorredores=0.0;
         Map<Integer, Integer> relacaoPedidoQuantidade = new HashMap<>();
+        BitSet p = individuo.cadeiaOrders;
+        BitSet c = individuo.cadeiaAisles;
         for (int i = p.nextSetBit(0); i >= 0; i = p.nextSetBit(i + 1)) {
             Map<Integer, Integer> pedido = orders.get(i);
             for (Map.Entry<Integer, Integer> entrada : pedido.entrySet()) {
@@ -82,7 +80,7 @@ public class GeneticAlgorithm {
 
         numItens = relacaoPedidoQuantidade.size();
         if (numItens < waveSizeLB || numItens > waveSizeUB){
-            return -1;
+            return -1.0;
         }
         for (int i = c.nextSetBit(0); i >= 0; i = c.nextSetBit(i + 1)) {
             Map<Integer, Integer> corredor = aisles.get(i);
@@ -94,11 +92,70 @@ public class GeneticAlgorithm {
             numCorredores++;
         }
         for (Map.Entry<Integer, Integer> entrada : relacaoPedidoQuantidade.entrySet()) {
-            if(entrada.getValue() < 0){
-                return -1;
+            if(entrada.getValue() > 0){
+                return -1.0;
             }
         }
         return numItens/numCorredores;
     }
+
+    private List<Individual> inicializarPopulacao(List<Individual> populacao, int nIndividuos, Random random) {
+        Individual individuo;
+        int nOrders, nAisles, indice;
+        for (int i=0; i<nIndividuos; i++){
+            individuo = new Individual(orders.size(), aisles.size());
+            nOrders = random.nextInt(orders.size());
+            for (int j=0; j<nOrders; j++){
+                indice = random.nextInt(nOrders);
+                individuo.cadeiaOrders.set(indice);
+            }
+            nAisles = random.nextInt(aisles.size());
+            for (int j=0; j<nAisles; j++){
+                indice = random.nextInt(nAisles);
+                individuo.cadeiaAisles.set(indice);
+            }
+            populacao.add(individuo);
+        }
+        return populacao;
+    }
+
+    private Individual mutacao(Individual ind, double taxa){
+        for (int i=ind.cadeiaOrders.nextSetBit(0); i>=0; i = ind.cadeiaOrders.nextSetBit(i+1)){
+            if(Math.random() < taxa){
+                ind.cadeiaOrders.flip(i);
+            }
+        }
+        for (int i=ind.cadeiaAisles.nextSetBit(0); i>=0; i = ind.cadeiaAisles.nextSetBit(i+1)){
+            if(Math.random() < taxa){
+                ind.cadeiaAisles.flip(i);
+            }
+        }
+        return ind;
+    }
+
+    private List<Individual> cruzamento(Individual ind1, Individual ind2, double taxa, Random random){
+        List<Individual> filhos = new ArrayList<>();
+        int indice;
+        if(Math.random() < taxa){
+            indice = random.nextInt(ind1.cadeiaOrders.size());
+            for(int i=indice; i<ind1.cadeiaOrders.size(); i++){
+                boolean a = ind1.cadeiaOrders.get(i);
+                boolean b = ind2.cadeiaOrders.get(i);
+                ind1.cadeiaOrders.set(i, b);
+                ind2.cadeiaOrders.set(i, a);
+            }
+            indice = random.nextInt(ind1.cadeiaAisles.size());
+            for(int i=indice; i<ind1.cadeiaAisles.size(); i++){
+                boolean a = ind1.cadeiaAisles.get(i);
+                boolean b = ind2.cadeiaAisles.get(i);
+                ind1.cadeiaAisles.set(i, b);
+                ind2.cadeiaAisles.set(i, a);
+            }
+        }
+        filhos.add(ind1);
+        filhos.add(ind2);
+        return filhos;
+    }
 }
+
 
