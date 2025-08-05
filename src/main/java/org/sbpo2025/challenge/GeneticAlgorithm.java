@@ -23,7 +23,8 @@ public class GeneticAlgorithm {
         Random random = new Random();
         BitSet cadeiaOrders = new BitSet(orders.size());
         BitSet cadeiaAisles = new BitSet(aisles.size());
-        double resultado, numGeracoes=5;
+        double resultado = 0, numGeracoes=5;
+        double taxaMutacao = 0.2;
 
         // Inicializar população genética
         int nOrders = random.nextInt(orders.size());
@@ -37,15 +38,34 @@ public class GeneticAlgorithm {
             cadeiaAisles.set(indice);
         }
         // Repetir teste de aptidão e cruzamentos até critério de parada
-        for (int i=0; i<numGeracoes; i++){
+        for (int i=0; i<numGeracoes; i++) {
+
             // Testar aptidão da população inicial
             resultado = aptidao(cadeiaOrders, cadeiaAisles);
-            // Fazer cruzamento
 
+            // Fazer cruzamento
+            for (int j = 0; j < orders.size(); j++) {
+                if (random.nextDouble() < taxaMutacao) {
+                    cadeiaOrders.flip(j);
+                }
+            }
+            for (int j = 0; j < aisles.size(); j++) {
+                if (random.nextDouble() < taxaMutacao) {
+                    cadeiaAisles.flip(j);
+                }
+            }
         }
 
         // Retornar melhor solução encontrada
-
+        Set<Integer> pedidos = new HashSet<>();
+        Set<Integer> corredores = new HashSet<>();
+        for (int i = cadeiaOrders.nextSetBit(0); i >= 0; i = cadeiaOrders.nextSetBit(i + 1)) {
+           pedidos.add(i);
+        }
+        for (int i = cadeiaAisles.nextSetBit(0); i >= 0; i = cadeiaAisles.nextSetBit(i + 1)) {
+            corredores.add(i);
+        }
+        return new ChallengeSolution(pedidos, corredores);
     }
 
     private Integer aptidao(BitSet p, BitSet c){
