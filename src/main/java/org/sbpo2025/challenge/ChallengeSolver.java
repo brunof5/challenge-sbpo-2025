@@ -38,6 +38,13 @@ public class ChallengeSolver {
 
     public ChallengeSolution solve(StopWatch stopWatch) {
         ChallengeSolution solution = geneticAlgorithm.solve();
+        try {
+            ParametricSolver modelo = new ParametricSolver(orders, aisles, nItems, waveSizeLB, waveSizeUB);
+            modelo.setInitialSolution(solution);
+            solution = modelo.solveModel();
+        } catch (IloException e){
+            System.out.println(e.getMessage());
+        }
         return solution;
     }
 
