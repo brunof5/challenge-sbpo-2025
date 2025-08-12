@@ -4,8 +4,6 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.*;
 
-
-
 public class GeneticAlgorithm {
     private final List<Map<Integer, Integer>> orders;
     private final List<Map<Integer, Integer>> aisles;
@@ -19,11 +17,12 @@ public class GeneticAlgorithm {
         this.nItems = nItems;
         this.waveSizeLB = waveSizeLB;
         this.waveSizeUB = waveSizeUB;
+
     }
 
     public ChallengeSolution solve() {
         Random random = new Random();
-        double numGeracoes=5;
+        double numGeracoes=10;
         double taxaMutacao = 0.02;
         double taxaCruzamento = 0.7;
         int nPopulacaoInicial = 10;
@@ -53,8 +52,15 @@ public class GeneticAlgorithm {
         }
 
         // Retornar melhor solução encontrada
-        Individual individuo = populacao.get(0);
 
+        Individual individuo = populacao.get(0);
+        for(Individual i:populacao){
+            System.out.println(aptidao(i));
+            if(aptidao(i) != -1.0){
+                individuo = i;
+                break;
+            }
+        }
         return individuo.converterIndividuoEmSolution();
     }
 
@@ -95,15 +101,20 @@ public class GeneticAlgorithm {
 
     private List<Individual> inicializarPopulacao(List<Individual> populacao, int nIndividuos, Random random) {
         Individual individuo;
+        /*for(int i=0; i<nIndividuos; i++){
+            individuo = new Individual(new ImprovedGreedyAlgorithm(orders, aisles, nItems, waveSizeLB, waveSizeUB).solve());
+            populacao.add(individuo);
+        }*/
+
         int nOrders, nAisles, indice;
         for (int i=0; i<nIndividuos; i++){
             individuo = new Individual(orders.size(), aisles.size());
+            nAisles = random.nextInt(aisles.size());
             nOrders = random.nextInt(orders.size());
             for (int j=0; j<nOrders; j++){
                 indice = random.nextInt(nOrders);
                 individuo.cadeiaOrders.set(indice);
             }
-            nAisles = random.nextInt(aisles.size());
             for (int j=0; j<nAisles; j++){
                 indice = random.nextInt(nAisles);
                 individuo.cadeiaAisles.set(indice);

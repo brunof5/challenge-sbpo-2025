@@ -11,6 +11,19 @@ public class Individual {
         this.cadeiaAisles = new BitSet(nAisles);
     }
 
+    public Individual(ChallengeSolution solution){
+        Set<Integer> pedidos = solution.orders();
+        Set<Integer> corredores = solution.aisles();
+        this.cadeiaOrders = new BitSet(pedidos.size());
+        this.cadeiaAisles = new BitSet(corredores.size());
+        for(Integer i : pedidos){
+            cadeiaOrders.set(i);
+        }
+        for(Integer i : corredores){
+            cadeiaAisles.set(i);
+        }
+    }
+
     public ChallengeSolution converterIndividuoEmSolution(){
         Set<Integer> pedidos = new HashSet<>();
         Set<Integer> corredores = new HashSet<>();
