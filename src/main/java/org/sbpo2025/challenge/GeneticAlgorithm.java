@@ -4,6 +4,8 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.*;
 
+
+
 public class GeneticAlgorithm {
     private final List<Map<Integer, Integer>> orders;
     private final List<Map<Integer, Integer>> aisles;
@@ -21,10 +23,10 @@ public class GeneticAlgorithm {
 
     public ChallengeSolution solve() {
         Random random = new Random();
-        double resultado = 0, numGeracoes=5;
-        double taxaMutacao = 0.2;
+        double numGeracoes=5;
+        double taxaMutacao = 0.02;
         double taxaCruzamento = 0.7;
-        int nPopulacaoInicial = 3;
+        int nPopulacaoInicial = 10;
         List<Individual> populacao = new ArrayList<>();
 
         // Inicializar população genética
@@ -33,8 +35,8 @@ public class GeneticAlgorithm {
         // Repetir teste de aptidão e cruzamentos até critério de parada
         for (int i=0; i<numGeracoes; i++) {
 
-            // Testar aptidão da população inicial
-            populacao.sort((ind1, ind2) -> Double.compare(aptidao(ind1), aptidao(ind2)));
+            // Testar aptidão da população inicial;
+            populacao.sort((ind1, ind2) -> Double.compare(aptidao(ind2), aptidao(ind1)));
 
             // Seleciona 2 mais aptos
             Individual ind1 = populacao.get(0);
@@ -46,27 +48,19 @@ public class GeneticAlgorithm {
             ind1 = mutacao(filhos.get(0), taxaMutacao);
             ind2 = mutacao(filhos.get(1), taxaMutacao);
 
-            populacao = new ArrayList<>();
             populacao.add(ind1);
             populacao.add(ind2);
         }
 
         // Retornar melhor solução encontrada
         Individual individuo = populacao.get(0);
-        Set<Integer> pedidos = new HashSet<>();
-        Set<Integer> corredores = new HashSet<>();
-        for (int i = individuo.cadeiaOrders.nextSetBit(0); i >= 0; i = individuo.cadeiaOrders.nextSetBit(i + 1)) {
-           pedidos.add(i);
-        }
-        for (int i = individuo.cadeiaAisles.nextSetBit(0); i >= 0; i = individuo.cadeiaAisles.nextSetBit(i + 1)) {
-            corredores.add(i);
-        }
-        return new ChallengeSolution(pedidos, corredores);
+
+        return individuo.converterIndividuoEmSolution();
     }
 
     private Double aptidao(Individual individuo){
         double numItens, numCorredores=0.0;
-        Map<Integer, Integer> relacaoPedidoQuantidade = new HashMap<>();
+        Map<Integer, Integer> relacaoItemQuantidade = new HashMap<>();
         BitSet p = individuo.cadeiaOrders;
         BitSet c = individuo.cadeiaAisles;
         for (int i = p.nextSetBit(0); i >= 0; i = p.nextSetBit(i + 1)) {
@@ -74,11 +68,11 @@ public class GeneticAlgorithm {
             for (Map.Entry<Integer, Integer> entrada : pedido.entrySet()) {
                 Integer chave = entrada.getKey();
                 Integer valor = entrada.getValue();
-                relacaoPedidoQuantidade.put(chave, relacaoPedidoQuantidade.getOrDefault(chave, 0)+valor);
+                relacaoItemQuantidade.put(chave, relacaoItemQuantidade.getOrDefault(chave, 0)+valor);
             }
         }
 
-        numItens = relacaoPedidoQuantidade.size();
+        numItens = relacaoItemQuantidade.size();
         if (numItens < waveSizeLB || numItens > waveSizeUB){
             return -1.0;
         }
@@ -87,11 +81,11 @@ public class GeneticAlgorithm {
             for (Map.Entry<Integer, Integer> entrada : corredor.entrySet()) {
                 Integer chave = entrada.getKey();
                 Integer valor = entrada.getValue();
-                relacaoPedidoQuantidade.put(chave, relacaoPedidoQuantidade.getOrDefault(chave, 0)-valor);
+                relacaoItemQuantidade.put(chave, relacaoItemQuantidade.getOrDefault(chave, 0)-valor);
             }
             numCorredores++;
         }
-        for (Map.Entry<Integer, Integer> entrada : relacaoPedidoQuantidade.entrySet()) {
+        for (Map.Entry<Integer, Integer> entrada : relacaoItemQuantidade.entrySet()) {
             if(entrada.getValue() > 0){
                 return -1.0;
             }

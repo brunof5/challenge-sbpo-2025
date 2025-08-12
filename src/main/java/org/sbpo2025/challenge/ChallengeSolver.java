@@ -1,12 +1,11 @@
 package org.sbpo2025.challenge;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.lang3.time.StopWatch;
+
+
 
 import ilog.concert.IloException;
 
@@ -37,15 +36,80 @@ public class ChallengeSolver {
     }
 
     public ChallengeSolution solve(StopWatch stopWatch) {
-        ChallengeSolution solution = geneticAlgorithm.solve();
+        int iteration = 0, maxIterations = 15;
+        double bestQ = 0.0, q = 0.0, epsilon = 1e-4;
+
+        ChallengeSolution currentSolution = geneticAlgorithm.solve();
+
+        q = printGreedy(currentSolution);
+
+        System.out.println("\nTempo decorrido: " + getElapsedTime(stopWatch) + " seg.");
+        System.out.println();
+
+        System.out.println("### Parametric solver ###");
+
+        ParametricSolver paramSolver = new ParametricSolver(orders, aisles, nItems, waveSizeLB, waveSizeUB);
+
         try {
-            ParametricSolver modelo = new ParametricSolver(orders, aisles, nItems, waveSizeLB, waveSizeUB);
-            modelo.setInitialSolution(solution);
-            solution = modelo.solveModel();
-        } catch (IloException e){
-            System.out.println(e.getMessage());
+            do {
+                paramSolver.updateObjectiveFunction(orders, aisles, q);
+
+                if (currentSolution != null && isSolutionFeasible(currentSolution)) {
+                    paramSolver.setInitialSolution(currentSolution);
+                }
+
+                paramSolver.setTimeLimit(getRemainingTime(stopWatch));
+
+                ChallengeSolution newSolution = paramSolver.solveModel();
+
+                System.out.println();
+                System.out.print("it: " + iteration + ", ");
+
+                if (newSolution != null && isSolutionFeasible(newSolution)) {
+                    double newQ = computeObjectiveFunction(newSolution);
+
+                    System.out.println("q: " + newQ);
+
+                    if (newQ > bestQ) {
+                        bestQ = newQ;
+                        currentSolution = newSolution;
+                    }
+
+                    int totalUnitsPicked = 0;
+                    for (int order : newSolution.orders()) {
+                        totalUnitsPicked += orders.get(order).values().stream()
+                                .mapToInt(Integer::intValue)
+                                .sum();
+                    }
+                    int numVisitedAisles = newSolution.aisles().size();
+
+                    System.out.println("Total units: " + totalUnitsPicked);
+                    System.out.println("Visited aisles: " + numVisitedAisles);
+
+                    double Fq = totalUnitsPicked - q * numVisitedAisles;
+
+                    if (Math.abs(Fq) < epsilon) break;
+
+                    q = newQ;
+                } else {
+                    System.out.println("Solução não encontrada ou infactível");
+                }
+
+                System.out.println("Tempo decorrido: " + getElapsedTime(stopWatch) + " seg.");
+
+                iteration++;
+            } while (iteration < maxIterations && getRemainingTime(stopWatch) > 1);
+
+        } catch (IloException e) {
+            e.printStackTrace();
+            return null;
+        } finally {
+            paramSolver.endModel();
         }
-        return solution;
+
+        System.out.println("\nTempo decorrido: " + getElapsedTime(stopWatch) + " seg.");
+
+        return currentSolution;
     }
 
     private double printGreedy(ChallengeSolution currentSolution) {
@@ -149,4 +213,5 @@ public class ChallengeSolver {
         // Objective function: total units picked / number of visited aisles
         return (double) totalUnitsPicked / numVisitedAisles;
     }
+
 }

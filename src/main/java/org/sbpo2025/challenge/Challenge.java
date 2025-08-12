@@ -109,6 +109,7 @@ public class Challenge {
     }
 
     public static void main(String[] args) {
+
         // Start the stopwatch to track the running time
         StopWatch stopWatch = StopWatch.createStarted();
 
