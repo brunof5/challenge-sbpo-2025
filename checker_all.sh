@@ -1,9 +1,14 @@
 #!/bin/bash
 
-# Caminho para os diretórios (mude conforme necessidade)
-# Observação: O nome das instâncias de entrada/saída devem ser os mesmos
-input_directory="./datasets/a"
-output_directory="./output/a"
+# Verifica se foram passados exatamente 2 argumentos
+if [ $# -ne 2 ]; then
+  echo "Uso: $0 <diretório_entrada> <diretório_saida>"
+  exit 1
+fi
+
+# Diretórios de entrada e saída recebidos via terminal
+input_directory="$1"
+output_directory="$2"
 
 # Verifica se os diretórios de entrada e saída existem
 if [ ! -d "$input_directory" ]; then
